@@ -1,0 +1,48 @@
+<!doctype html>
+<html>
+  <body>
+    <p>Enter food item and limit, then click "Submit"</p>
+
+    <form id="frm1">
+      What would you like to make:
+      <input type="text" id="food" />
+      <br />
+      How many results do you want to analyze:
+      <input type="number" id="limit" />
+      <br />
+      <input type="button" onclick="findRecipes()" value="Search!" />
+    </form>
+    <pre id="output"></pre>
+
+    <script>
+      async function findRecipes() {
+        const food = document.getElementById("food").value;
+        const limit = document.getElementById("limit").value;
+
+        // Build query parameters safely
+        const params = new URLSearchParams({ food, limit });
+
+        // Call the backend on port 8001
+        const response = await fetch(
+          `http://localhost:8001/searches?${params}`,
+        );
+
+        // Handle server errors gracefully
+        if (!response.ok) {
+          const text = await response.text();
+          console.error("Server error:", text);
+          document.getElementById("output").textContent = "Error: See console";
+          return;
+        }
+
+        const data = await response.json();
+
+        document.getElementById("output").textContent = JSON.stringify(
+          data,
+          null,
+          2,
+        );
+      }
+    </script>
+  </body>
+</html>
