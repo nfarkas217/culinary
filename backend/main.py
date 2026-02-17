@@ -2,8 +2,34 @@ from fastapi import FastAPI
 from bs4 import BeautifulSoup
 import json
 import requests
+from serpapi import GoogleSearch
+from fastapi.middleware.cors import CORSMiddleware
+
+
 
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # fine for development
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+"""params = {
+    "engine": "google",
+  "q": "Chocolate Cake",
+  "google_domain": "google.com",
+  "hl": "en",
+  "gl": "us",
+  "api_key": "f7612467a62f567429786e3efc72900a8089ed7b3feeb49e1226a86c9917908c"
+}
+
+search = GoogleSearch(params)
+results = search.get_dict()
+"""
+
 def extract_json_ld(url):
     headers = {
     "User-Agent": (
@@ -44,4 +70,10 @@ url = 'https://thewoksoflife.com/lu-rou-fan-taiwanese-braised-pork-rice-bowl/'
 def read_root():
     return {"Hello" : "World"}
 
-
+@app.get("/searches")
+def find_recipies(food: str, limit: int):
+    return {
+        "food_requested": food,
+        "limit_requested": limit,
+        "message": f"Analyzing {limit} results for {food}"
+    }
