@@ -10,17 +10,29 @@
       How many results do you want to analyze:
       <input type="number" id="limit" />
       <br />
+      Sort by:
+      <select id="sortBy">
+        <option value="">-- No Sorting --</option>
+        <option value="ingredients">Most Common Ingredients</option>
+        <option value="time">Fastest Time</option>
+        <option value="rating">Highest Rating</option>
+      </select>
+      <br />
       <input type="button" onclick="findRecipes()" value="Search!" />
     </form>
-    <pre id="output"></pre>
+    <div id="output"></div>
 
     <script>
       async function findRecipes() {
         const food = document.getElementById("food").value;
         const limit = document.getElementById("limit").value;
+        const sortBy = document.getElementById("sortBy").value;
 
         // Build query parameters safely
         const params = new URLSearchParams({ food, limit });
+        if (sortBy) {
+          params.append("sort_by", sortBy);
+        }
 
         // Call the backend on port 8001
         const response = await fetch(
@@ -30,18 +42,93 @@
         // Handle server errors gracefully
         if (!response.ok) {
           const text = await response.text();
-          console.error("Server error:", text);
-          document.getElementById("output").textContent = "Error: See console";
+          document.getElementById("output").textContent =
+            `Server error: ${text}`;
           return;
         }
 
         const data = await response.json();
+        // --- DEBUGGING: Log the data received from the backend ---
+        console.log("Data from backend:", data);
 
-        document.getElementById("output").textContent = JSON.stringify(
-          data,
-          null,
-          2,
-        );
+        const outputDiv = document.getElementById("output");
+        outputDiv.innerHTML = ""; // Clear previous results
+
+        if (Object.keys(data).length === 0) {
+          outputDiv.textContent = "No recipes found.";
+          return;
+        }
+
+        for (const recipeKey in data) {
+          const recipe = data[recipeKey];
+
+          const recipeCard = document.createElement("div");
+          recipeCard.style.border = "1px solid #eee";
+          recipeCard.style.borderRadius = "8px";
+          recipeCard.style.padding = "1em";
+          recipeCard.style.marginBottom = "1em";
+          recipeCard.style.boxShadow = "0 2px 4px rgba(0,0,0,0.1)";
+
+          const recipeName = document.createElement("h3");
+          recipeName.textContent = recipe.name || "Unnamed Recipe";
+          recipeName.style.marginTop = "0";
+          recipeCard.appendChild(recipeName);
+
+          if (
+            recipe.recipeIngredient &&
+            Array.isArray(recipe.recipeIngredient)
+          ) {
+            const ingredientsTitle = document.createElement("h4");
+            ingredientsTitle.textContent = "Ingredients";
+            recipeCard.appendChild(ingredientsTitle);
+
+            const ingredientsList = document.createElement("ul");
+            ingredientsList.style.listStylePosition = "inside";
+            ingredientsList.style.paddingLeft = "0";
+
+            recipe.recipeIngredient.forEach((ing) => {
+              const li = document.createElement("li");
+
+              if (typeof ing === "string") {
+                li.textContent = ing;
+                ingredientsList.appendChild(li);
+                return;
+              }
+
+              if (!ing.ingredient_name) return;
+
+              li.textContent =
+                `${ing.quantity || ""} ${ing.ingredient_name}`.trim();
+
+              // Dynamic Highlighting
+              if (ing.consensus_level === "Essential") {
+                li.style.backgroundColor = "rgba(0, 128, 0, 0.1)"; // Light green background
+                li.style.fontWeight = "bold";
+                li.innerHTML += " <strong>(Essential)</strong>";
+                li.title = `Essential: Found in ${ing.frequency_percent}% of recipes.`;
+              } else if (ing.consensus_level === "Flavor Variant") {
+                li.style.backgroundColor = "rgba(255, 165, 0, 0.15)"; // Light orange background
+                li.innerHTML += " <em>(Variant)</em>";
+                li.title = `Flavor Variant: Found in ${ing.frequency_percent}% of recipes.`;
+              }
+
+              // Secret Ingredient Alert
+              if (ing.is_secret_ingredient) {
+                const proTip = document.createElement("span");
+                proTip.textContent = " Pro Tip!";
+                proTip.style.color = "rebeccapurple";
+                proTip.style.fontWeight = "bold";
+                proTip.style.marginLeft = "8px";
+                proTip.title =
+                  "This unique ingredient is found only in this highly-rated recipe!";
+                li.appendChild(proTip);
+              }
+              ingredientsList.appendChild(li);
+            });
+            recipeCard.appendChild(ingredientsList);
+          }
+          outputDiv.appendChild(recipeCard);
+        }
       }
     </script>
   </body>
