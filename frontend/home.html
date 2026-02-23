@@ -74,6 +74,53 @@
           recipeName.style.marginTop = "0";
           recipeCard.appendChild(recipeName);
 
+          // --- Meta Info (Rating, Time, Link) ---
+          const metaInfo = document.createElement("div");
+          metaInfo.style.marginBottom = "10px";
+          metaInfo.style.fontSize = "0.9em";
+          metaInfo.style.color = "#555";
+
+          // 1. Rating
+          if (recipe.aggregateRating) {
+            const rVal = recipe.aggregateRating.ratingValue;
+            const rCount =
+              recipe.aggregateRating.reviewCount ||
+              recipe.aggregateRating.ratingCount;
+            if (rVal) {
+              const ratingSpan = document.createElement("span");
+              ratingSpan.textContent = `★ ${rVal}`;
+              if (rCount) ratingSpan.textContent += ` (${rCount} reviews)`;
+              ratingSpan.style.marginRight = "15px";
+              metaInfo.appendChild(ratingSpan);
+            }
+          }
+
+          // 2. Time
+          const timeStr =
+            recipe.totalTime || recipe.cookTime || recipe.prepTime;
+          if (timeStr) {
+            const timeSpan = document.createElement("span");
+            // Simple cleanup for ISO 8601 duration (e.g., PT1H30M -> 1h 30m)
+            const cleanTime = timeStr
+              .replace(/^PT/, "")
+              .replace("H", "h ")
+              .replace("M", "m")
+              .toLowerCase();
+            timeSpan.textContent = `⏱ ${cleanTime}`;
+            timeSpan.style.marginRight = "15px";
+            metaInfo.appendChild(timeSpan);
+          }
+
+          // 3. Link
+          if (recipe.url) {
+            const link = document.createElement("a");
+            link.href = recipe.url;
+            link.target = "_blank";
+            link.textContent = "🔗 View Recipe";
+            metaInfo.appendChild(link);
+          }
+          recipeCard.appendChild(metaInfo);
+
           if (
             recipe.recipeIngredient &&
             Array.isArray(recipe.recipeIngredient)

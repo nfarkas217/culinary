@@ -66,9 +66,69 @@ async def extract_json_ld(client: httpx.AsyncClient, url: str):
 
                 for item in graph:
                     if isinstance(item, dict) and item.get('@type') == 'Recipe':
+                        if "url" not in item:
+                            item["url"] = url
                         return item # Return the first recipe found
             except json.JSONDecodeError:
                 continue # Ignore scripts that are not valid JSON
+    
+    # Fallback: Microdata
+    microdata_recipe = soup.find(attrs={"itemtype": lambda x: x and "Recipe" in x})
+    if microdata_recipe:
+        data = {"@type": "Recipe"}
+        for tag in microdata_recipe.find_all(attrs={"itemprop": True}):
+            key = tag["itemprop"]
+            if isinstance(key, list):
+                key = key[0]
+            
+            val = tag.get("content") or tag.get("src") or tag.get("href") or tag.get_text(" ", strip=True)
+            
+            if key in data:
+                if isinstance(data[key], list):
+                    data[key].append(val)
+                else:
+                    data[key] = [data[key], val]
+            else:
+                data[key] = val
+        
+        # Map 'ingredients' to 'recipeIngredient' for consistency
+        if "ingredients" in data and "recipeIngredient" not in data:
+            data["recipeIngredient"] = data["ingredients"]
+            
+        if "url" not in data:
+            data["url"] = url
+
+        return data
+
+    # Fallback: RDFa
+    rdfa_recipe = soup.find(attrs={"typeof": lambda x: x and "Recipe" in x})
+    if rdfa_recipe:
+        data = {"@type": "Recipe"}
+        for tag in rdfa_recipe.find_all(attrs={"property": True}):
+            key = tag["property"]
+            if isinstance(key, list):
+                key = key[0]
+            
+            val = tag.get("content") or tag.get("src") or tag.get("href") or tag.get_text(" ", strip=True)
+            
+            if key in data:
+                if isinstance(data[key], list):
+                    data[key].append(val)
+                else:
+                    data[key] = [data[key], val]
+            else:
+                data[key] = val
+        
+        # Map 'ingredients' to 'recipeIngredient' for consistency
+        if "ingredients" in data and "recipeIngredient" not in data:
+            data["recipeIngredient"] = data["ingredients"]
+            
+        if "url" not in data:
+            data["url"] = url
+
+        return data
+
+    print(f"Skipping {url}: No valid recipe data found in JSON-LD, Microdata, or RDFa.")
     return None
 
 
@@ -287,25 +347,40 @@ async def find_recipies(food: str, limit: int, sort_by: Optional[SortBy] = None)
             raise HTTPException(status_code=500, detail=results["error"])
 
         recipes = {}
-        recipe_count = 0
-        organic_results = results.get("organic_results", [])
-
-        valid_links = []
-        for result in organic_results:
-            link = result.get("link")
-            if link and "youtube.com" not in link:
-                valid_links.append(link)
+        start = 0
+        # Safety break: stop if we've checked too many results (e.g., 3x the limit) to prevent infinite loops
+        max_search_depth = max(30, limit * 3)
 
         async with httpx.AsyncClient() as client:
-            tasks = [extract_json_ld(client, url) for url in valid_links]
-            extracted_data = await asyncio.gather(*tasks)
-
-        for data in extracted_data:
-            if data:
-                recipe_count += 1
-                recipes[f"recipe_{recipe_count}"] = data
-                if recipe_count >= limit:
+            while len(recipes) < limit and start < max_search_depth:
+                print(f"Fetching search results starting at index {start}...")
+                params["start"] = start
+                params["num"] = 10 # Fetch in batches of 10
+                
+                search = GoogleSearch(params)
+                results = search.get_dict()
+                
+                organic_results = results.get("organic_results", [])
+                if not organic_results:
+                    print("No more search results available.")
                     break
+
+                valid_links = [
+                    r.get("link") for r in organic_results 
+                    if r.get("link") and "youtube.com" not in r.get("link")
+                ]
+
+                # Extract in parallel for this batch
+                tasks = [extract_json_ld(client, url) for url in valid_links]
+                extracted_data = await asyncio.gather(*tasks)
+
+                for data in extracted_data:
+                    if data:
+                        recipes[f"recipe_{len(recipes) + 1}"] = data
+                        if len(recipes) >= limit:
+                            break
+                
+                start += 10 # Prepare for next page
 
         if not recipes:
             return {}
